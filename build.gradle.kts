@@ -11,7 +11,7 @@ group = "jetzt.arbeitszeitbetrug"
 version = "0.0.1"
 
 application {
-    mainClass.set("jetzt.arbeitszeitbetrug.ApplicationKt")
+    mainClass.set("jetzt.arbeitszeitbetrug.app.AppKt")
 
     val isDevelopment: Boolean = project.ext.has("development")
     applicationDefaultJvmArgs = listOf("-Dio.ktor.development=$isDevelopment")
