@@ -20,6 +20,8 @@ sealed class ValidatorResult {
 @JvmInline
 value class Allowed(val value: Boolean)
 
+data class ValidationInfo(val type: ValidatorType, var allowed: Allowed)
+
 fun interface ValidatorType {
     fun validate(value: String): ValidatorResult
 }
@@ -27,7 +29,7 @@ fun interface ValidatorType {
 object Validators {
 
     fun length(min: Int, max: Int) = ValidatorType { value: String ->
-        if (value.length in min..max) Ok else Error("Value not in range ($min, $max)")
+        if (value.length in min..max) Ok else Error("Value not in range: [$min, $max]")
     }
 
     fun notEmpty() = ValidatorType { value: String ->
@@ -60,20 +62,8 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
      */
     fun validateParams(params: List<ParamContextDsl>, values: Parameters): ValidatorResult {
         params.forEach { param ->
-            val value = values[param.name] ?: return Error("Parameter not found")
-            param.validators.forEach { (validator, allowed) ->
-                val validationResult = validator.validate(value)
-
-                if(validationResult is Ok && !allowed.value) {
-                    LOGGER.error("Validation succeeded for a disallowed validator")
-                    return Error("") //TODO: Add message
-                }
-
-                if (validationResult is Error) {
-                    LOGGER.error("Validation failed for ${param.name}")
-                    return validationResult
-                }
-            }
+            val actualValue = values[param.name] ?: return Error("Parameter not found")
+            return validateInput(param.validators, actualValue)
         }
         return Ok
     }
@@ -88,20 +78,33 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
     inline fun <reified T : Any> validateBody(bodies: List<BodyContextDsl<T>>, value: T): ValidatorResult {
         bodies.forEach { body ->
             body.fields.forEach { field ->
-                val actualValue = field.extractValue(value)
-                field.validators.forEach { (validator, allowed) ->
-                    val validationResult = validator.validate(actualValue)
-
-                    if(validationResult is Ok && !allowed.value) {
-                        LOGGER.error("Validation succeeded for a disallowed validator")
-                        return Error("") //TODO: Add message
+                val actualValue = field.extractValue.run {
+                    val invokeResult = runCatching {
+                        invoke(value)
                     }
-
-                    if (validationResult is Error) {
-                        LOGGER.error("Validation failed for ${field.extractValue}")
-                        return validationResult
+                    if(invokeResult.isFailure) {
+                        return Error("Given type is not the expected (Expected: ${T::class.java.name})")
                     }
+                    return@run invokeResult.getOrNull() ?: return Error("Value is null")
                 }
+                return validateInput(field.validators, actualValue)
+            }
+        }
+        return Ok
+    }
+
+    fun validateInput(validationInfo: List<ValidationInfo>, actualValue: String) : ValidatorResult {
+        validationInfo.forEach { (validator, allowed) ->
+            val validationResult = validator.validate(actualValue)
+
+            if(validationResult is Ok && !allowed.value) {
+                LOGGER.error("Validation succeeded for a disallowed validator")
+                return Error("") //TODO: Add message
+            }
+
+            if (validationResult is Error) {
+                LOGGER.error("Validation failed for $actualValue")
+                return validationResult
             }
         }
         return Ok
@@ -116,10 +119,6 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
      */
     @Suppress("UNCHECKED_CAST")
     inline fun <reified T : Any> validate(parameters: Parameters, body: T): ValidatorResult {
-        if(!Reflections.isTypeOf(body, validationChain.body)) {
-            return Error("Types do not match (expected: ${body::class.java.name}, got: ${validationChain.body::class.java.name}")
-        }
-
         val paramValidationResult = validateParams(validationChain.params, parameters)
         val bodyValidationResult = validateBody<T>(validationChain.body as List<BodyContextDsl<T>>, body)
 
@@ -164,13 +163,13 @@ class ValidationChainDsl<T> {
     }
 }
 
-class ParamContextDsl(val name: String, val validators: MutableMap<ValidatorType, Allowed> = mutableMapOf()) {
+class ParamContextDsl(val name: String, val validators: ArrayList<ValidationInfo> = arrayListOf()) {
     operator fun ValidatorType.unaryPlus() {
-        validators[this] = Allowed(true)
+        validators.add(ValidationInfo(this, Allowed(true)))
     }
 
     operator fun ValidatorType.unaryMinus() {
-        validators[this] = Allowed(false)
+        validators.add(ValidationInfo(this, Allowed(false)))
     }
 }
 
@@ -183,12 +182,12 @@ class BodyContextDsl<T> {
     }
 }
 
-class FieldContextDsl<T>(val extractValue: (T) -> String, val validators: MutableMap<ValidatorType, Allowed> = mutableMapOf()) {
+class FieldContextDsl<T>(val extractValue: (T) -> String, val validators: ArrayList<ValidationInfo> = arrayListOf()) {
     operator fun ValidatorType.unaryPlus() {
-        validators[this] = Allowed(true)
+        validators.add(ValidationInfo(this, Allowed(true)))
     }
 
     operator fun ValidatorType.unaryMinus() {
-        validators[this] = Allowed(false)
+        validators.add(ValidationInfo(this, Allowed(false)))
     }
 }
