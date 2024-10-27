@@ -114,7 +114,12 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
      * @param body: the body to validate
      * @return ValidatorResult indicating whether the validation was successful
      */
+    @Suppress("UNCHECKED_CAST")
     inline fun <reified T : Any> validate(parameters: Parameters, body: T): ValidatorResult {
+        if(!Reflections.isTypeOf(body, validationChain.body)) {
+            return Error("Types do not match (expected: ${body::class.java.name}, got: ${validationChain.body::class.java.name}")
+        }
+
         val paramValidationResult = validateParams(validationChain.params, parameters)
         val bodyValidationResult = validateBody<T>(validationChain.body as List<BodyContextDsl<T>>, body)
 
