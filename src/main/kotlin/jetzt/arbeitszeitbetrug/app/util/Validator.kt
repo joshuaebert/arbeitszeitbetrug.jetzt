@@ -129,6 +129,7 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
     @Suppress("UNCHECKED_CAST")
     inline fun <reified T : Any> validate(parameters: Parameters, body: T): ValidatorResult {
         val paramValidationResult = validateParams(validationChain.params, parameters)
+        //TODO: cast may not succeed. Add check
         val bodyValidationResult = validateBody<T>(validationChain.body as BodyContextDsl<T>, body)
 
         return if (paramValidationResult is Ok && bodyValidationResult is Ok) {

@@ -6,7 +6,7 @@ import jetzt.arbeitszeitbetrug.app.util.Validator
 import jetzt.arbeitszeitbetrug.app.util.ValidatorResult
 
 /**
- * @brief Passes responsibility to handle the call to the corresponding controller
+ * Passes responsibility to handle the call to the corresponding controller
  *
  * @param call: the call that should be passed
  * @param controller: the controller that should handle the call. Must suspend and have the
@@ -17,7 +17,7 @@ suspend inline fun pass(call: ApplicationCall, controller: suspend (ApplicationC
 }
 
 /**
- * @brief Passes responsibility to handle the call to the corresponding controller
+ * Passes responsibility to handle the call to the corresponding controller
  *
  * @param T: the type of the request body
  * @param call: the call that should be passed

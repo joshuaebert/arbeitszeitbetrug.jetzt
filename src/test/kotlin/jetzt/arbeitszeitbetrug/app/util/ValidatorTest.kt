@@ -81,6 +81,7 @@ class ValidatorTest {
                 }
             }
         }
+        //But instead the call contains the structure of OtherTestObject
         val testObject = OtherTestObject("abc", "def")
         val parameterValidatorResult = bodyValidator.validate(Parameters.Empty, testObject)
         assert(parameterValidatorResult is ValidatorResult.Error)
