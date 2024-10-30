@@ -7,19 +7,19 @@ import io.ktor.server.response.*
 
 fun Application.statusPageModule() {
     install(StatusPages) {
-        handleRateLimit(this)
-        handleException(this)
+        handleRateLimit()
+        handleException()
     }
 }
 
-fun handleRateLimit(config: StatusPagesConfig) {
-    config.status(HttpStatusCode.TooManyRequests) { call, cause ->
+fun StatusPagesConfig.handleRateLimit() {
+    status(HttpStatusCode.TooManyRequests) { call, cause ->
         call.respondText("$cause", ContentType.Text.Plain)
     }
 }
 
-fun handleException(config: StatusPagesConfig) {
-    config.exception<Throwable> { call, cause ->
+fun StatusPagesConfig.handleException() {
+    exception<Throwable> { call, cause ->
         call.respondText("$cause", ContentType.Text.Plain)
     }
 }

@@ -6,12 +6,12 @@ import kotlin.time.Duration.Companion.minutes
 
 fun Application.rateLimitModule() {
     install(RateLimit) {
-        handleGlobalRateLimit(this)
+        setGlobalRateLimit()
     }
 }
 
-fun handleGlobalRateLimit(config: RateLimitConfig) {
-    config.global {
+fun RateLimitConfig.setGlobalRateLimit() {
+    global {
         rateLimiter(limit = 5, refillPeriod = 1.minutes)
     }
 }

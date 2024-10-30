@@ -14,7 +14,7 @@ typealias FieldContextDslInit<T> = FieldContextDsl<T>.() -> Unit
 
 sealed class ValidatorResult {
     data object Ok : ValidatorResult()
-    data class Error(val message: String) :  ValidatorResult()
+    data class Error(val message: String) : ValidatorResult()
 }
 
 @JvmInline
@@ -28,14 +28,25 @@ fun interface ValidatorType {
 
 object Validators {
 
+    /**
+     * Checks if the length of the value is in an inclusive range
+     * @param min: minimum length
+     * @param max: maximum length
+     */
     fun length(min: Int, max: Int) = ValidatorType { value: String ->
         if (value.length in min..max) Ok else Error("Value not in range: [$min, $max]")
     }
 
+    /**
+     * Checks if the value is not empty
+     */
     fun notEmpty() = ValidatorType { value: String ->
         if (value.isNotEmpty()) ValidatorResult.Ok else Error("Value is empty")
     }
 
+    /**
+     * Checks if the value is an integer
+     */
     fun isInt() = ValidatorType { value: String ->
         try {
             value.toInt()
@@ -71,33 +82,31 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
     /**
      * Validates the body of a call
      *
-     * @param bodies: the bodies to validate
+     * @param body: the body to validate
      * @param value: the value to validate
      * @return ValidatorResult indicating whether the validation was successful
      */
-    inline fun <reified T : Any> validateBody(bodies: List<BodyContextDsl<T>>, value: T): ValidatorResult {
-        bodies.forEach { body ->
-            body.fields.forEach { field ->
-                val actualValue = field.extractValue.run {
-                    val invokeResult = runCatching {
-                        invoke(value)
-                    }
-                    if(invokeResult.isFailure) {
-                        return Error("Given type is not the expected (Expected: ${T::class.java.name})")
-                    }
-                    return@run invokeResult.getOrNull() ?: return Error("Value is null")
+    inline fun <reified T : Any> validateBody(body: BodyContextDsl<T>, value: T): ValidatorResult {
+        body.fields.forEach { field ->
+            val actualValue = field.extractValue.run {
+                val invokeResult = runCatching {
+                    invoke(value)
                 }
-                return validateInput(field.validators, actualValue)
+                if (invokeResult.isFailure) {
+                    return Error("Given type is not the expected (Expected: ${T::class.java.name})")
+                }
+                return@run invokeResult.getOrNull() ?: return Error("Value is null")
             }
+            return validateInput(field.validators, actualValue)
         }
         return Ok
     }
 
-    fun validateInput(validationInfo: List<ValidationInfo>, actualValue: String) : ValidatorResult {
+    fun validateInput(validationInfo: List<ValidationInfo>, actualValue: String): ValidatorResult {
         validationInfo.forEach { (validator, allowed) ->
             val validationResult = validator.validate(actualValue)
 
-            if(validationResult is Ok && !allowed.value) {
+            if (validationResult is Ok && !allowed.value) {
                 LOGGER.error("Validation succeeded for a disallowed validator")
                 return Error("") //TODO: Add message
             }
@@ -120,7 +129,7 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
     @Suppress("UNCHECKED_CAST")
     inline fun <reified T : Any> validate(parameters: Parameters, body: T): ValidatorResult {
         val paramValidationResult = validateParams(validationChain.params, parameters)
-        val bodyValidationResult = validateBody<T>(validationChain.body as List<BodyContextDsl<T>>, body)
+        val bodyValidationResult = validateBody<T>(validationChain.body as BodyContextDsl<T>, body)
 
         return if (paramValidationResult is Ok && bodyValidationResult is Ok) {
             Ok
@@ -130,6 +139,11 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
     }
 }
 
+/**
+ * Creates a new validation chain for param & body validation
+ * @param T: the expected body type
+ * @return a validator
+ */
 @JvmName("validatorChain0")
 inline fun <reified T : Any> validatorChain(
     validatorChain: ValidationChainDsl<T> = ValidationChainDsl(),
@@ -139,35 +153,52 @@ inline fun <reified T : Any> validatorChain(
     return Validator(chain)
 }
 
+/**
+ * Creates a new validation chain for param validation
+ * @return a validator
+ */
 @JvmName("validatorChain1")
 inline fun validatorChain(
     validatorChain: ValidationChainDsl<Any> = ValidationChainDsl(),
     init: ValidationChainDslInit<Any>
-) : Validator {
+): Validator {
     val chain = validatorChain.apply(init)
     return Validator(chain)
 }
 
 class ValidationChainDsl<T> {
     val params = mutableListOf<ParamContextDsl>()
-    val body = mutableListOf<BodyContextDsl<T>>()
+    var body = BodyContextDsl<T>()
 
+    /**
+     * Adds a param to the validation chain
+     */
     inline fun param(name: String, paramContext: ParamContextDsl = ParamContextDsl(name), init: ParamContextDslInit) {
         val p = ParamContextDsl(name).apply(init)
         params.add(p)
     }
 
+    /**
+     * Adds a body to the validation chain
+     */
     inline fun body(bodyContext: BodyContextDsl<T> = BodyContextDsl(), init: BodyContextDslInit<T>) {
         val b = BodyContextDsl<T>().apply(init)
-        body.add(b)
+        body = b
     }
 }
 
 class ParamContextDsl(val name: String, val validators: ArrayList<ValidationInfo> = arrayListOf()) {
+
+    /**
+     * Adds a validator to the param context
+     */
     operator fun ValidatorType.unaryPlus() {
         validators.add(ValidationInfo(this, Allowed(true)))
     }
 
+    /**
+     * Adds a disallowed validator to the param context
+     */
     operator fun ValidatorType.unaryMinus() {
         validators.add(ValidationInfo(this, Allowed(false)))
     }
@@ -176,6 +207,10 @@ class ParamContextDsl(val name: String, val validators: ArrayList<ValidationInfo
 class BodyContextDsl<T> {
     val fields = mutableListOf<FieldContextDsl<T>>()
 
+    /**
+     * Adds a field to the body context
+     * @param extractValue: the value to extract from the body
+     */
     fun field(extractValue: (T) -> String, init: FieldContextDslInit<T>) {
         val fieldContext = FieldContextDsl(extractValue).apply(init)
         fields.add(fieldContext)
@@ -183,10 +218,17 @@ class BodyContextDsl<T> {
 }
 
 class FieldContextDsl<T>(val extractValue: (T) -> String, val validators: ArrayList<ValidationInfo> = arrayListOf()) {
+
+    /**
+     * Adds a validator to the field context
+     */
     operator fun ValidatorType.unaryPlus() {
         validators.add(ValidationInfo(this, Allowed(true)))
     }
 
+    /**
+     * Adds a disallowed validator to the field context
+     */
     operator fun ValidatorType.unaryMinus() {
         validators.add(ValidationInfo(this, Allowed(false)))
     }
