@@ -2,6 +2,10 @@ package jetzt.arbeitszeitbetrug.app.util
 
 import io.ktor.http.*
 import io.ktor.util.logging.*
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.format.DateTimeParseException
+import kotlin.time.TimeMark
 
 val LOGGER = KtorSimpleLogger("Validator")
 
@@ -42,6 +46,15 @@ object Validators {
      */
     fun notEmpty() = ValidatorType { value: String ->
         if (value.isNotEmpty()) ValidatorResult.Ok else Error("Value is empty")
+    }
+
+    fun isTime() = ValidatorType {value: String ->
+        try {
+            LocalTime.parse(value)
+            Ok
+        } catch (e: DateTimeParseException) {
+            Error("Value is not a time")
+        }
     }
 
     /**
