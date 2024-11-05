@@ -24,12 +24,20 @@ sealed class ValidatorResult {
 @JvmInline
 value class Allowed(val value: Boolean)
 
+/**
+ * Contains information about a validator
+ * @param type: the type of the validator
+ * @param allowed: whether the validator is allowed
+ */
 data class ValidationInfo(val type: ValidatorType, var allowed: Allowed)
 
 fun interface ValidatorType {
     fun validate(value: String): ValidatorResult
 }
 
+/**
+ * Contains a set of predefined validators
+ */
 object Validators {
 
     /**
@@ -70,6 +78,9 @@ object Validators {
     }
 }
 
+/**
+ * A validator for parameters and body of a request
+ */
 open class Validator(val validationChain: ValidationChainDsl<*>) {
 
     /**
@@ -115,6 +126,12 @@ open class Validator(val validationChain: ValidationChainDsl<*>) {
         return Ok
     }
 
+    /**
+     * Validates the input of a call
+     * @param validationInfo: the validation info to validate (validator type, allowed)
+     * @param actualValue: the actual value to validate
+     * @return ValidatorResult indicating whether the validation was successful
+     */
     fun validateInput(validationInfo: List<ValidationInfo>, actualValue: String): ValidatorResult {
         validationInfo.forEach { (validator, allowed) ->
             val validationResult = validator.validate(actualValue)
